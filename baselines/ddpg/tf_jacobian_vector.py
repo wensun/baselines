@@ -74,7 +74,11 @@ def cg(f_Ax, b, damping = 1e-3, cg_iters=10, callback=None, verbose=False, resid
         if verbose: 
             print (fmtstr % (i, rdotr, np.linalg.norm(x)))
         z = f_Ax(p) + damping*p  #(A+lambda I)p
-        v = rdotr / p.dot(z)
+        pdotz = p.dot(z)
+        if pdotz < np.finfo(np.float64).eps: 
+            v = (rdotr + np.finfo(np.float64).eps) / (pdotz + np.finfo(np.float64).eps) # add epsilon to avoid zero division 
+        else:
+            v = rdotr / pdotz
         x += v*p
         r -= v*z
         newrdotr = r.dot(r)
@@ -92,36 +96,57 @@ def cg(f_Ax, b, damping = 1e-3, cg_iters=10, callback=None, verbose=False, resid
     return x
 
 
-np.random.seed(1337)
-Theta = tf.Variable(np.random.randn(3,2), dtype = tf.float32)
-reshaped_theta = tf.reshape(Theta, [numel(Theta)])
-#A = tf.constant(np.random.randn(5, 3), dtype=tf.float32)
-x = tf.placeholder(tf.float32, [1, 3]) #input 5 dim
-y =  tf.matmul(x,Theta) #tf.tanh(tf.matmul(x, Theta)) #output 3 dim:  y = f(x;Theta) = tanh(x.dot(Theta))
-u_left = tf.placeholder(tf.float32, [1, 2])
-u_right = tf.placeholder(tf.float32, [1,6])
+if __name__ == '__main__':
+    np.random.seed(1337)
+    Theta = tf.Variable(np.random.randn(2,3), dtype = tf.float32)
+    reshaped_theta = tf.reshape(Theta, [numel(Theta)])
+    #A = tf.constant(np.random.randn(5, 3), dtype=tf.float32)
+    x = tf.placeholder(tf.float32, [3]) #input 5 dim
+    y =  tf.matmul(Theta, tf.reshape(x, shape=[3, 1])) #tf.tanh(tf.matmul(x, Theta)) #output 3 dim:  y = f(x;Theta) = tanh(x.dot(Theta))
+    u_left = tf.placeholder(tf.float32, [2, 1])
+    u_right = tf.placeholder(tf.float32, [6])
 
-vjp = v_jacobian_product(y, [Theta], u_left)  #u.dot(\nabla_{theta}f(x;Theta))
-jpv = jacobian_v_product(y, [Theta], u_right) # \nabla_{theta}f(x;Theta).dot(u)
-jjv = Jacobian_p_Jacobian_u_product(y, [Theta], u_right)
+    vjp = v_jacobian_product(y, [Theta], u_left)  #u.dot(\nabla_{theta}f(x;Theta))
+    jvp = jacobian_v_product(y, [Theta], u_right) # \nabla_{theta}f(x;Theta).dot(u)
+    jjv = Jacobian_p_Jacobian_u_product(y, [Theta], u_right)
 
-x_val = np.random.randn(1, 3)
-u_val_right = np.random.randn(1, 6)
-u_val_left = np.random.randn(1,2)
+    x_val = np.random.randn(3)
+    u_val_right = np.random.randn(6)
+    u_val_left = np.random.randn(2, 1)
 
+    Jtheta = [tf.reshape(tf.gradients(y[0], Theta), shape=[6]), tf.reshape(tf.gradients(y[1], Theta), shape=[6])]
 
-init_op = tf.initialize_all_variables()
-with tf.Session() as sess:
-    sess.run(init_op)
-    vjp_result = sess.run(vjp, feed_dict={x:x_val, u_left:u_val_left})
-    jpv_result = sess.run(jpv,  feed_dict={x: x_val, u_right: u_val_right})
-    jjv_results = sess.run(jjv, feed_dict={x:x_val, u_right:u_val_right})
-    jpjv = JpJu_product(symbolic_jpjv = jjv, symbolic_x = x, symbolic_u = u_right,
-                        x_val = x_val, u_val = u_val_right, session = sess)
+    init_op = tf.initialize_all_variables()
+    with tf.Session() as sess:
+        sess.run(init_op)
+        vjp_result = sess.run(vjp, feed_dict={x:x_val, u_left:u_val_left})
+        jvp_result = sess.run(jvp,  feed_dict={x: x_val, u_right: u_val_right})
+        jjv_results = sess.run(jjv, feed_dict={x:x_val, u_right:u_val_right})
+        jpjv = JpJu_product(symbolic_jpjv = jjv, symbolic_x = x, symbolic_u = u_right,
+                            x_val = x_val, u_val = u_val_right, session = sess)
+        Jtheta_results = np.array(sess.run(Jtheta, feed_dict={x: x_val}))
 
-    print (Theta.eval())
-    print (reshaped_theta.eval())
-    print (vjp_result)
-    print (jpv_result)
-    print (jjv_results)
+        # f(x) = J'Jx, b = J'Ju 
+        # golden solution is x = u 
+        f_Ax = lambda u: JpJu_product(symbolic_jpjv = jjv, symbolic_x = x, symbolic_u = u_right,
+                            x_val = x_val, u_val = u, session = sess)
+        cgresult = cg(f_Ax, jpjv, cg_iters=10, verbose=True, damping=1e-3)
+
+        print ("Theta = ", Theta.eval())
+        print ("reshaped_theta = ", reshaped_theta.eval())
+        print ("Jtheta = ", Jtheta_results)
+        print ("==============================")
+        print ("vjp         = ", vjp_result) # should match 
+        print ("v' * Jtheta = ", np.transpose(u_val_left).dot(Jtheta_results))
+        print ("==============================")
+        print ("jvp        = ", jvp_result) # should match 
+        print ("Jtheta * u = ", Jtheta_results.dot(u_val_right))
+        print ("==============================")
+        print ("jjv                  = ", jjv_results) # should match 
+        print ("Jtheta' * Jtheta * u = ", np.transpose(Jtheta_results).dot(Jtheta_results).dot(u_val_right))
+        print ("==============================")
+        print ("cg x        = ", cgresult) # may not match u_right
+        print ("u_right     = ", u_val_right)
+        print ("sol f(x)    = ", f_Ax(cgresult)) # must match golden 
+        print ("golden f(x) = ", f_Ax(u_val_right))
 

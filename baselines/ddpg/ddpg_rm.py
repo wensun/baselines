@@ -41,13 +41,11 @@ class DDPG_RM(DDPG):
         flat_actor_shape = self.flat_actor_trainable_vars.get_shape().as_list()[1]
         self.u_right = tf.placeholder(shape=[flat_actor_shape], dtype=tf.float32, name="u_right")
         self.JpJu = Jacobian_p_Jacobian_u_product(self.actor_loss, [self.flat_actor_trainable_vars], self.u_right)
-        self.actor_grads_natural = tf.placeholder(shape=[flat_actor_shape], dtype=tf.float32, name="actor_grads_natural")
         # function, given vector u, compute J' J u
         self.actor_f_Ax = lambda u: JpJu_product(self.JpJu, self.flat_actor_trainable_vars, self.u_right, self.flat_actor_trainable_vars.eval(session=self.sess), u, self.sess)
         print("actor.trainable_vars = ", self.actor.trainable_vars)
         print("u_right = ", self.u_right)
         print("JpJu = ", self.JpJu)
-        print("actor_grads_natural = ", self.actor_grads_natural)
         print("actor_f_Ax = ", self.actor_f_Ax)
 
     def train(self):
@@ -90,7 +88,7 @@ class DDPG_RM(DDPG):
             self.critic_target: target_Q,
         })
         # ==== compute natural gradient 
-        actor_grads_natural = cg(self.actor_f_Ax, actor_grads)
+        actor_grads_natural = cg(self.actor_f_Ax, actor_grads, cg_iters=100)
         # ====
         self.actor_optimizer.update(actor_grads_natural, stepsize=self.actor_lr)
         self.critic_optimizer.update(critic_grads, stepsize=self.critic_lr)
