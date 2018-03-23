@@ -24,7 +24,7 @@ def flatgrad(loss, var_list, grad_ys, clip_norm=None):
         tf.reshape(grad if grad is not None else tf.zeros_like(v), [numel(v)])
         for (v, grad) in zip(var_list, grads)
     ])
-    return tf.reshape(flatten_grad, [1, numel(flatten_grad)])
+    return tf.reshape(flatten_grad, [numel(flatten_grad)])
 
 #implementation of u J
 def v_jacobian_product(ys, xs, u):
@@ -47,9 +47,9 @@ def Jacobian_p_Jacobian_u_product(ys, xs, u):
 
 #create a function (not in symbolic fashion) that returns the real values of J'Jv,
 #so that we can keep call it in Conjugate Gradient (CG)
-def JpJu_product(simbolic_jpjv, simbolic_x, simbolic_u,
+def JpJu_product(symbolic_jpjv, symbolic_x, symbolic_u,
                 x_val, u_val, session):
-    jpjv_result = sess.run(simbolic_jpjv, feed_dict={simbolic_x:x_val, simbolic_u:u_val})
+    jpjv_result = session.run(symbolic_jpjv, feed_dict={symbolic_x:x_val, symbolic_u:u_val})
     return jpjv_result
 
 #use cg to solve (A+lambdaI)x = b (in defualt, )
@@ -65,12 +65,14 @@ def cg(f_Ax, b, damping = 1e-3, cg_iters=10, callback=None, verbose=False, resid
 
     fmtstr =  "%10i %10.3g %10.3g"
     titlestr =  "%10s %10s %10s"
-    if verbose: print titlestr % ("iter", "residual norm", "soln norm")
+    if verbose: 
+        print (titlestr % ("iter", "residual norm", "soln norm"))
 
-    for i in xrange(cg_iters):
+    for i in range(cg_iters):
         if callback is not None:
             callback(x)
-        if verbose: print fmtstr % (i, rdotr, np.linalg.norm(x))
+        if verbose: 
+            print (fmtstr % (i, rdotr, np.linalg.norm(x)))
         z = f_Ax(p) + damping*p  #(A+lambda I)p
         v = rdotr / p.dot(z)
         x += v*p
@@ -85,7 +87,8 @@ def cg(f_Ax, b, damping = 1e-3, cg_iters=10, callback=None, verbose=False, resid
 
     if callback is not None:
         callback(x)
-    if verbose: print fmtstr % (i+1, rdotr, np.linalg.norm(x))  # pylint: disable=W0631
+    if verbose: 
+        print (fmtstr % (i+1, rdotr, np.linalg.norm(x)))  # pylint: disable=W0631
     return x
 
 
@@ -113,12 +116,12 @@ with tf.Session() as sess:
     vjp_result = sess.run(vjp, feed_dict={x:x_val, u_left:u_val_left})
     jpv_result = sess.run(jpv,  feed_dict={x: x_val, u_right: u_val_right})
     jjv_results = sess.run(jjv, feed_dict={x:x_val, u_right:u_val_right})
-    #jpjv = JpJu_product(simbolic_jpjv = jjv, simbolic_x = x, simbolic_u = u_right,
-    #                    x_val = x_val, u_val = u_val_right, session = sess)
+    jpjv = JpJu_product(symbolic_jpjv = jjv, symbolic_x = x, symbolic_u = u_right,
+                        x_val = x_val, u_val = u_val_right, session = sess)
 
-    print Theta.eval()
-    print reshaped_theta.eval()
-    print vjp_result
-    print jpv_result
-    print jjv_results
+    print (Theta.eval())
+    print (reshaped_theta.eval())
+    print (vjp_result)
+    print (jpv_result)
+    print (jjv_results)
 
