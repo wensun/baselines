@@ -1,5 +1,7 @@
+from mpi4py import MPI
 import tensorflow as tf
 import numpy as np
+import baselines.common.tf_util as U
 
 '''
 implementation of jacobian vector (left and right) multiplication, and J'Jp in the order of Jp first and then J'(Jp)
@@ -75,14 +77,17 @@ def cg(f_Ax, b, damping = 1e-3, cg_iters=10, callback=None, verbose=False, resid
             print (fmtstr % (i, rdotr, np.linalg.norm(x)))
         z = f_Ax(p) + damping*p  #(A+lambda I)p
         pdotz = p.dot(z)
-        if pdotz < np.finfo(np.float64).eps: 
-            v = (rdotr + np.finfo(np.float64).eps) / (pdotz + np.finfo(np.float64).eps) # add epsilon to avoid zero division 
+        if pdotz < np.finfo(np.float32).eps: 
+            v = (rdotr + np.finfo(np.float32).eps) / (pdotz + np.finfo(np.float32).eps) # add epsilon to avoid zero division 
         else:
             v = rdotr / pdotz
         x += v*p
         r -= v*z
         newrdotr = r.dot(r)
-        mu = newrdotr/rdotr
+        if rdotr < np.finfo(np.float32).eps: 
+            mu = (newrdotr + np.finfo(np.float32).eps) / (rdotr + np.finfo(np.float32).eps) # add epsilon to avoid zero division 
+        else:
+            mu = newrdotr/rdotr
         p = r + mu*p
 
         rdotr = newrdotr
@@ -95,6 +100,41 @@ def cg(f_Ax, b, damping = 1e-3, cg_iters=10, callback=None, verbose=False, resid
         print (fmtstr % (i+1, rdotr, np.linalg.norm(x)))  # pylint: disable=W0631
     return x
 
+class PlainDescent(object):
+    def __init__(self, var_list, scale_grad_by_procs=True, comm=None):
+        self.var_list = var_list
+        self.t = 0
+        self.setfromflat = U.SetFromFlat(var_list)
+        self.getflat = U.GetFlat(var_list)
+        self.scale_grad_by_procs = scale_grad_by_procs
+        self.comm = MPI.COMM_WORLD if comm is None else comm
+
+    def update(self, gradients, stepsize):
+        if self.t % 100 == 0:
+            self.check_synced()
+        localg = gradients.astype('float32')
+        globalg = np.zeros_like(localg)
+        self.comm.Allreduce(localg, globalg, op=MPI.SUM)
+        if self.scale_grad_by_procs:
+            globalg /= self.comm.Get_size()
+
+        self.t += 1
+        self.setfromflat(self.getflat() - stepsize*gradients)
+
+    def sync(self):
+        theta = self.getflat()
+        self.comm.Bcast(theta, root=0)
+        self.setfromflat(theta)
+
+    def check_synced(self):
+        if self.comm.Get_rank() == 0: # this is root
+            theta = self.getflat()
+            self.comm.Bcast(theta, root=0)
+        else:
+            thetalocal = self.getflat()
+            thetaroot = np.empty_like(thetalocal)
+            self.comm.Bcast(thetaroot, root=0)
+            assert (thetaroot == thetalocal).all(), (thetaroot, thetalocal)
 
 if __name__ == '__main__':
     np.random.seed(1337)

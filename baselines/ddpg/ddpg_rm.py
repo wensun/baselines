@@ -5,6 +5,8 @@
 #
 
 import tensorflow as tf
+from functools import reduce
+from baselines import logger
 from ddpg import DDPG
 from tf_jacobian_vector import *
 
@@ -48,6 +50,16 @@ class DDPG_RM(DDPG):
         print("JpJu = ", self.JpJu)
         print("actor_f_Ax = ", self.actor_f_Ax)
 
+    def setup_actor_optimizer(self):
+        logger.info('setting up actor optimizer')
+        self.actor_loss = -tf.reduce_mean(self.critic_with_actor_tf)
+        actor_shapes = [var.get_shape().as_list() for var in self.actor.trainable_vars]
+        actor_nb_params = sum([reduce(lambda x, y: x * y, shape) for shape in actor_shapes])
+        logger.info('  actor shapes: {}'.format(actor_shapes))
+        logger.info('  actor params: {}'.format(actor_nb_params))
+        self.actor_grads = U.flatgrad(self.actor_loss, self.actor.trainable_vars, clip_norm=self.clip_norm)
+        self.actor_optimizer = PlainDescent(var_list=self.actor.trainable_vars)
+
     def train(self):
         # Get a batch.
         batch = self.memory.sample(batch_size=self.batch_size)
@@ -88,9 +100,11 @@ class DDPG_RM(DDPG):
             self.critic_target: target_Q,
         })
         # ==== compute natural gradient 
-        actor_grads_natural = cg(self.actor_f_Ax, actor_grads, cg_iters=100)
+        actor_grads_natural = cg(self.actor_f_Ax, actor_grads, cg_iters=10)
+        # use actor_lr for delta  
+        mu = np.sqrt(self.actor_lr / (actor_grads.dot(actor_grads_natural) + np.finfo(np.float32).eps)) # avoid zero division 
         # ====
-        self.actor_optimizer.update(actor_grads_natural, stepsize=self.actor_lr)
+        self.actor_optimizer.update(actor_grads_natural, stepsize=mu)
         self.critic_optimizer.update(critic_grads, stepsize=self.critic_lr)
 
         return critic_loss, actor_loss
