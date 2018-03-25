@@ -42,13 +42,22 @@ class DDPG_RM(DDPG):
         self.flat_actor_trainable_vars = flatvar(self.actor.trainable_vars)
         flat_actor_shape = self.flat_actor_trainable_vars.get_shape().as_list()[1]
         self.u_right = tf.placeholder(shape=[flat_actor_shape], dtype=tf.float32, name="u_right")
-        self.JpJu = Jacobian_p_Jacobian_u_product(self.actor_loss, [self.flat_actor_trainable_vars], self.u_right)
+        #self.JpJu = Jacobian_p_Jacobian_u_product(self.actor_loss, [self.flat_actor_trainable_vars], self.u_right)
+
+        #instead, we setup hessian vector product here:
+        self.mean_actor_tf_p_actor_tf = tf.reduce_mean(tf.reduce_sum(tf.square(self.actor_tf),axis=1))   # define g(theta) = (\sum_{i=1}^N pi(x_i;\theta)'\pi(x_i;\theta))/N
+        self.Hu = hessian_vector_product(y = self.mean_actor_tf_p_actor_tf, xs = [self.flat_actor_trainable_vars], u = self.u_right) # \nabla^2 g(\theta) u
         # function, given vector u, compute J' J u
-        self.actor_f_Ax = lambda u: JpJu_product(self.JpJu, self.flat_actor_trainable_vars, self.u_right, self.flat_actor_trainable_vars.eval(session=self.sess), u, self.sess)
+        #self.actor_f_Ax = lambda u: JpJu_product(self.JpJu, self.flat_actor_trainable_vars, self.u_right, self.flat_actor_trainable_vars.eval(session=self.sess), u, self.sess)
+        # function, given vector u, compute H u
+        self.actor_f_Ax = lambda u: Hv_product(self.Hu, self.flat_actor_trainable_vars, self.u_right, 
+                                              self.flat_actor_trainable_vars.eval(session=self.sess), u, self.sess)
         print("actor.trainable_vars = ", self.actor.trainable_vars)
         print("u_right = ", self.u_right)
-        print("JpJu = ", self.JpJu)
-        print("actor_f_Ax = ", self.actor_f_Ax)
+        print ("Hv = ", self.Hu)
+        print("actor_f_Ax", self.actor_f_Ax)
+        #print("JpJu = ", self.JpJu)
+        #print("actor_f_Ax = ", self.actor_f_Ax)
 
     def setup_actor_optimizer(self):
         logger.info('setting up actor optimizer')

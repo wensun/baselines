@@ -18,7 +18,7 @@ def intprod(x):
 def numel(x):
     return intprod(var_shape(x))
 
-def flatgrad(loss, var_list, grad_ys, clip_norm=None):
+def flatgrad(loss, var_list, grad_ys=None, clip_norm=None):
     grads = tf.gradients(loss, var_list, grad_ys)
     if clip_norm is not None:
         grads = [tf.clip_by_norm(grad, clip_norm=clip_norm) for grad in grads]
@@ -53,6 +53,20 @@ def JpJu_product(symbolic_jpjv, symbolic_x, symbolic_u,
                 x_val, u_val, session):
     jpjv_result = session.run(symbolic_jpjv, feed_dict={symbolic_x:x_val, symbolic_u:u_val})
     return jpjv_result
+
+##################Implementation of Hessian-vector product##################
+#\nabla^2 f(x) \times u
+def hessian_vector_product(y, xs, u): 
+    #y: scalar, xs: list of tensor, u: vector (same dimension as flatten xs)
+    g = flatgrad(y, xs) #dy/dxs: vector (same dimension of as the flatten xs)
+    gu = tf.matmul(tf.reshape(g,(1,-1)), tf.reshape(u, (-1,1))) #scalar
+    Hv = flatgrad(loss = gu, var_list = xs) # d (u.dot(dy/dx)) / dx, vector (same dim as the flatten xs)
+    return Hv
+
+def Hv_product(symbolic_Hv, symbolic_x, symbolic_u, x_val, u_val, session):
+    Hv_result = session.run(symbolic_Hv, feed_dict={symbolic_x:x_val, symbolic_u:u_val})
+    return Hv_result
+
 
 #use cg to solve (A+lambdaI)x = b (in defualt, )
 def cg(f_Ax, b, damping = 1e-3, cg_iters=10, callback=None, verbose=False, residual_tol=1e-10):
