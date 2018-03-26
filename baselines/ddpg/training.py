@@ -46,6 +46,10 @@ def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, pa
     tau=0.01, eval_env=None, param_noise_adaption_interval=50, alg='DDPG'):
     rank = MPI.COMM_WORLD.Get_rank()
 
+    #force tau and actor_lr the same:
+    #tau = actor_lr
+    print('################# tau {0}, actor_lr {1}, critic_lr {2} ####################'.format(tau, actor_lr, critic_lr))
+
     assert (np.abs(env.action_space.low) == env.action_space.high).all()  # we assume symmetric actions.
     max_action = env.action_space.high
     logger.info('scaling actions by {} before executing in env'.format(max_action))
@@ -205,6 +209,8 @@ def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, pa
                 epoch_episode_eval_rewards += eval_episode_rewards
                 combined_stats['eval:avg epi-ret (curr)'] = np.mean(eval_episode_rewards)
                 combined_stats['eval:avg epi-ret (all)'] = np.mean(epoch_episode_eval_rewards)
+                combined_stats['eval:num episodes (curr)'] = len(eval_episode_rewards)
+                combined_stats['eval:num episodes (all)'] = len(epoch_episode_eval_rewards)
                 #combined_stats['eval/return_history'] = np.mean(eval_episode_rewards_history)
                 #combined_stats['eval/Q'] = eval_qs
                 #combined_stats['eval/episodes (all)'] = len(epoch_episode_eval_rewards)
@@ -235,4 +241,4 @@ def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, pa
                         pickle.dump(env.get_state(), f)
                 if eval_env and hasattr(eval_env, 'get_state'):
                     with open(os.path.join(logdir, 'eval_env_state.pkl'), 'wb') as f:
-                        pickle.dump(eval_env.get_state(), f)
+                                pickle.dump(eval_env.get_state(), f)
