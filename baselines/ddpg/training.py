@@ -65,15 +65,26 @@ def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, pa
         epoch = 0
         start_time = time.time()
 
-        epoch_episode_rewards = []
-        epoch_episode_steps = []
-        epoch_episode_eval_rewards = []
-        epoch_episode_eval_steps = []
-        epoch_start_time = time.time()
+        #epoch_episode_rewards = []
+        #epoch_episode_steps = []
+        #epoch_episode_eval_rewards = []
+        #epoch_episode_eval_steps = []
+        #epoch_start_time = time.time()
         epoch_actions = []
         epoch_qs = []
         epoch_episodes = 0
         for epoch in range(nb_epochs):
+            #every epoch, we will use nb_epoch_cycles*nb_rollout_steps for training
+            # and nb_epoch_cycles*nb_eval_steps for evaluation
+            #here, episode stands for one trajectory (from the begining to the termination)
+            epoch_episode_rewards = []
+            epoch_episode_steps = []
+            
+
+            #we do evaluation per epoch.
+            epoch_eval_episode_rewards = [] 
+            eval_episode_reward = 0.
+
             for cycle in range(nb_epoch_cycles):
                 # Perform rollouts.
                 for t_rollout in range(nb_rollout_steps):
@@ -127,10 +138,10 @@ def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, pa
                     agent.update_target_net()
 
                 # Evaluate.
-                eval_episode_rewards = []
+                #eval_episode_rewards = []
                 eval_qs = []
                 if eval_env is not None:
-                    eval_episode_reward = 0.
+                    #eval_episode_reward = 0.
                     for t_rollout in range(nb_eval_steps):
                         eval_action, eval_q = agent.pi(eval_obs, apply_noise=False, compute_Q=True)
                         eval_obs, eval_r, eval_done, eval_info = eval_env.step(max_action * eval_action)  # scale for execution in env (as far as DDPG is concerned, every action is in [-1, 1])
@@ -141,35 +152,46 @@ def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, pa
                         eval_qs.append(eval_q)
                         if eval_done:
                             eval_obs = eval_env.reset()
-                            eval_episode_rewards.append(eval_episode_reward)
+                            #eval_episode_rewards.append(eval_episode_reward)
+                            epoch_eval_episode_rewards.append(eval_episode_reward)
                             eval_episode_rewards_history.append(eval_episode_reward)
                             eval_episode_reward = 0.
-
+                
+                #END of one cycle
+            
+            #END of one EPOCH    
+            #summarize at the end of epoch: 
             mpi_size = MPI.COMM_WORLD.Get_size()
             # Log stats.
             # XXX shouldn't call np.mean on variable length lists
             duration = time.time() - start_time
             stats = agent.get_stats()
             combined_stats = stats.copy()
-            combined_stats['rollout/return'] = np.mean(epoch_episode_rewards)
-            combined_stats['rollout/return_history'] = np.mean(episode_rewards_history)
-            combined_stats['rollout/episode_steps'] = np.mean(epoch_episode_steps)
-            combined_stats['rollout/actions_mean'] = np.mean(epoch_actions)
-            combined_stats['rollout/Q_mean'] = np.mean(epoch_qs)
-            combined_stats['train/loss_actor'] = np.mean(epoch_actor_losses)
-            combined_stats['train/loss_critic'] = np.mean(epoch_critic_losses)
-            combined_stats['train/param_noise_distance'] = np.mean(epoch_adaptive_distances)
+            combined_stats['epoch id'] = epoch
+            #combined_stats['rollout/return'] = np.mean(epoch_episode_rewards)
+            combined_stats['avg cum rew in this epoch'] = np.mean(epoch_episode_rewards)
+            #combined_stats['rollout/return_history'] = np.mean(episode_rewards_history)
+            combined_stats['avg cum rew so far'] = np.mean(episode_rewards_history)
+            #combined_stats['rollout/episode_steps'] = np.mean(epoch_episode_steps)
+            combined_stats['avg episode len in this epoch'] = np.mean(epoch_episode_steps)
+            #combined_stats['rollout/actions_mean'] = np.mean(epoch_actions)
+            #combined_stats['rollout/Q_mean'] = np.mean(epoch_qs)
+            #combined_stats['train/loss_actor'] = np.mean(epoch_actor_losses)
+            #combined_stats['train/loss_critic'] = np.mean(epoch_critic_losses)
+            #combined_stats['train/param_noise_distance'] = np.mean(epoch_adaptive_distances)
             combined_stats['total/duration'] = duration
-            combined_stats['total/steps_per_second'] = float(t) / float(duration)
-            combined_stats['total/episodes'] = episodes
-            combined_stats['rollout/episodes'] = epoch_episodes
-            combined_stats['rollout/actions_std'] = np.std(epoch_actions)
+            #combined_stats['total/steps_per_second'] = float(t) / float(duration)
+            #combined_stats['total/episodes'] = episodes
+            #combined_stats['rollout/episodes'] = epoch_episodes
+            #combined_stats['rollout/actions_std'] = np.std(epoch_actions)
             # Evaluation statistics.
             if eval_env is not None:
-                combined_stats['eval/return'] = eval_episode_rewards
-                combined_stats['eval/return_history'] = np.mean(eval_episode_rewards_history)
-                combined_stats['eval/Q'] = eval_qs
-                combined_stats['eval/episodes'] = len(eval_episode_rewards)
+                #combined_stats['eval/return'] = np.mean(epoch_eval_episode_rewards)  #every accumulative reward at this epoch  #eval_episode_rewards
+                combined_stats['eval: avg cum rew in this epoch'] = np.mean(epoch_eval_episode_rewards)  #every accumulative reward at this epoch  #eval_episode_rewards
+                combined_stats['eval: avg cum rew so far'] = np.mean(eval_episode_rewards_history)
+                #combined_stats['eval/Q'] = eval_qs
+                #combined_stats['eval/episodes'] = len(eval_episode_rewards)
+            
             def as_scalar(x):
                 if isinstance(x, np.ndarray):
                     assert x.size == 1
