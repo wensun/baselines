@@ -4,6 +4,7 @@ from collections import deque
 import pickle
 
 from baselines.ddpg.ddpg import DDPG
+from ddpg_rm import DDPG_RM
 import baselines.common.tf_util as U
 
 from baselines import logger
@@ -11,21 +12,44 @@ import numpy as np
 import tensorflow as tf
 from mpi4py import MPI
 
+def evaluation(eval_env, total_num_of_steps, agent):
+    max_action = env.action_space.high
+    episodes_cum_rew = []
+    episode_rew = 0
+    obs = eval_env.reset()
+    for t in range(total_num_of_steps):
+        eval_action, eval_q = agent.pi(eval_obs, apply_noise=False, compute_Q=True)
+        eval_obs, eval_r, eval_done, eval_info = eval_env.step(max_action * eval_action)
+        episode_rew += eval_r
+
+        if eval_done:
+            eval_obs = eval_env.reset()
+            episodes_cum_rew.append(episode_rew)
+            episode_rew = 0.
+
+    return episodes_cum_rew
 
 def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, param_noise, actor, critic,
     normalize_returns, normalize_observations, critic_l2_reg, actor_lr, critic_lr, action_noise,
     popart, gamma, clip_norm, nb_train_steps, nb_rollout_steps, nb_eval_steps, batch_size, memory,
-    tau=0.01, eval_env=None, param_noise_adaption_interval=50):
+    tau=0.01, eval_env=None, param_noise_adaption_interval=50, alg='DDPG'):
     rank = MPI.COMM_WORLD.Get_rank()
 
     assert (np.abs(env.action_space.low) == env.action_space.high).all()  # we assume symmetric actions.
     max_action = env.action_space.high
     logger.info('scaling actions by {} before executing in env'.format(max_action))
-    agent = DDPG(actor, critic, memory, env.observation_space.shape, env.action_space.shape,
-        gamma=gamma, tau=tau, normalize_returns=normalize_returns, normalize_observations=normalize_observations,
-        batch_size=batch_size, action_noise=action_noise, param_noise=param_noise, critic_l2_reg=critic_l2_reg,
-        actor_lr=actor_lr, critic_lr=critic_lr, enable_popart=popart, clip_norm=clip_norm,
-        reward_scale=reward_scale)
+    if alg == 'DDPG': 
+        agent = DDPG(actor, critic, memory, env.observation_space.shape, env.action_space.shape,
+            gamma=gamma, tau=tau, normalize_returns=normalize_returns, normalize_observations=normalize_observations,
+            batch_size=batch_size, action_noise=action_noise, param_noise=param_noise, critic_l2_reg=critic_l2_reg,
+            actor_lr=actor_lr, critic_lr=critic_lr, enable_popart=popart, clip_norm=clip_norm,
+            reward_scale=reward_scale)
+    else:
+        agent = DDPG_RM(actor, critic, memory, env.observation_space.shape, env.action_space.shape,
+            gamma=gamma, tau=tau, normalize_returns=normalize_returns, normalize_observations=normalize_observations,
+            batch_size=batch_size, action_noise=action_noise, param_noise=param_noise, critic_l2_reg=critic_l2_reg,
+            actor_lr=actor_lr, critic_lr=critic_lr, enable_popart=popart, clip_norm=clip_norm,
+            reward_scale=reward_scale)
     logger.info('Using agent with the following configuration:')
     logger.info(str(agent.__dict__.items()))
 
@@ -57,15 +81,21 @@ def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, pa
         epoch = 0
         start_time = time.time()
 
-        epoch_episode_rewards = []
-        epoch_episode_steps = []
-        epoch_episode_eval_rewards = []
-        epoch_episode_eval_steps = []
-        epoch_start_time = time.time()
+        #epoch_episode_rewards = []
+        #epoch_episode_steps = []
+        #epoch_episode_eval_rewards = []
+        #epoch_episode_eval_steps = []
+        #epoch_start_time = time.time()
         epoch_actions = []
         epoch_qs = []
         epoch_episodes = 0
         for epoch in range(nb_epochs):
+            #every epoch, we will use nb_epoch_cycles*nb_rollout_steps for training
+            # and nb_epoch_cycles*nb_eval_steps for evaluation
+            #here, episode stands for one trajectory (from the begining to the termination)
+            epoch_episode_rewards = []
+            epoch_episode_steps = []
+
             for cycle in range(nb_epoch_cycles):
                 # Perform rollouts.
                 for t_rollout in range(nb_rollout_steps):
@@ -74,8 +104,8 @@ def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, pa
                     assert action.shape == env.action_space.shape
 
                     # Execute next action.
-                    if rank == 0 and render:
-                        env.render()
+                    #if rank == 0 and render:
+                    #    env.render()
                     assert max_action.shape == action.shape
                     new_obs, r, done, info = env.step(max_action * action)  # scale for execution in env (as far as DDPG is concerned, every action is in [-1, 1])
                     t += 1
@@ -118,11 +148,12 @@ def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, pa
                     epoch_actor_losses.append(al)
                     agent.update_target_net()
 
+                '''
                 # Evaluate.
-                eval_episode_rewards = []
+                #eval_episode_rewards = []
                 eval_qs = []
                 if eval_env is not None:
-                    eval_episode_reward = 0.
+                    #eval_episode_reward = 0.
                     for t_rollout in range(nb_eval_steps):
                         eval_action, eval_q = agent.pi(eval_obs, apply_noise=False, compute_Q=True)
                         eval_obs, eval_r, eval_done, eval_info = eval_env.step(max_action * eval_action)  # scale for execution in env (as far as DDPG is concerned, every action is in [-1, 1])
@@ -133,35 +164,47 @@ def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, pa
                         eval_qs.append(eval_q)
                         if eval_done:
                             eval_obs = eval_env.reset()
-                            eval_episode_rewards.append(eval_episode_reward)
+                            #eval_episode_rewards.append(eval_episode_reward)
+                            epoch_eval_episode_rewards.append(eval_episode_reward)
                             eval_episode_rewards_history.append(eval_episode_reward)
                             eval_episode_reward = 0.
-
+                '''
+                #END of one cycle
+            
+            #END of one EPOCH    
+            #summarize at the end of epoch: 
             mpi_size = MPI.COMM_WORLD.Get_size()
             # Log stats.
             # XXX shouldn't call np.mean on variable length lists
             duration = time.time() - start_time
             stats = agent.get_stats()
             combined_stats = stats.copy()
-            combined_stats['rollout/return'] = np.mean(epoch_episode_rewards)
-            combined_stats['rollout/return_history'] = np.mean(episode_rewards_history)
-            combined_stats['rollout/episode_steps'] = np.mean(epoch_episode_steps)
-            combined_stats['rollout/actions_mean'] = np.mean(epoch_actions)
-            combined_stats['rollout/Q_mean'] = np.mean(epoch_qs)
-            combined_stats['train/loss_actor'] = np.mean(epoch_actor_losses)
-            combined_stats['train/loss_critic'] = np.mean(epoch_critic_losses)
-            combined_stats['train/param_noise_distance'] = np.mean(epoch_adaptive_distances)
+            combined_stats['curr epoch id'] = epoch
+            #combined_stats['rollout/return'] = np.mean(epoch_episode_rewards)
+            combined_stats['avg cum rew in this epoch'] = np.mean(epoch_episode_rewards)
+            #combined_stats['rollout/return_history'] = np.mean(episode_rewards_history)
+            combined_stats['avg cum rew so far'] = np.mean(episode_rewards_history)
+            #combined_stats['rollout/episode_steps'] = np.mean(epoch_episode_steps)
+            combined_stats['avg episode len in this epoch'] = np.mean(epoch_episode_steps)
+            #combined_stats['rollout/actions_mean'] = np.mean(epoch_actions)
+            #combined_stats['rollout/Q_mean'] = np.mean(epoch_qs)
+            #combined_stats['train/loss_actor'] = np.mean(epoch_actor_losses)
+            #combined_stats['train/loss_critic'] = np.mean(epoch_critic_losses)
+            #combined_stats['train/param_noise_distance'] = np.mean(epoch_adaptive_distances)
             combined_stats['total/duration'] = duration
-            combined_stats['total/steps_per_second'] = float(t) / float(duration)
-            combined_stats['total/episodes'] = episodes
-            combined_stats['rollout/episodes'] = epoch_episodes
-            combined_stats['rollout/actions_std'] = np.std(epoch_actions)
+            #combined_stats['total/steps_per_second'] = float(t) / float(duration)
+            #combined_stats['total/episodes'] = episodes
+            #combined_stats['rollout/episodes'] = epoch_episodes
+            #combined_stats['rollout/actions_std'] = np.std(epoch_actions)
             # Evaluation statistics.
             if eval_env is not None:
-                combined_stats['eval/return'] = eval_episode_rewards
-                combined_stats['eval/return_history'] = np.mean(eval_episode_rewards_history)
-                combined_stats['eval/Q'] = eval_qs
-                combined_stats['eval/episodes'] = len(eval_episode_rewards)
+                eval_episodes_cmu_rew = evaluation(eval_env = eval_env, total_num_of_steps = nb_epoch_cycles*nb_eval_steps, agent = agent)
+                #combined_stats['eval/return'] = np.mean(epoch_eval_episode_rewards)  #every accumulative reward at this epoch  #eval_episode_rewards
+                combined_stats['eval: avg cum rew in this epoch'] = np.mean(eval_episodes_cmu_rew)  #every accumulative reward at this epoch  #eval_episode_rewards
+                #combined_stats['eval: avg cum rew so far'] = np.mean(eval_episode_rewards_history)
+                #combined_stats['eval/Q'] = eval_qs
+                #combined_stats['eval/episodes'] = len(eval_episode_rewards)
+            
             def as_scalar(x):
                 if isinstance(x, np.ndarray):
                     assert x.size == 1
