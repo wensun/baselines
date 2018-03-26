@@ -30,7 +30,7 @@ def run(env_id, seed, noise_type, layer_norm, evaluation, **kwargs):
     if evaluation and rank==0:
         eval_env = gym.make(env_id)
         eval_env = bench.Monitor(eval_env, os.path.join(logger.get_dir(), 'gym_eval'))
-        env = bench.Monitor(env, None)
+        #env = bench.Monitor(env, None)
     else:
         eval_env = None
 
@@ -113,6 +113,9 @@ def parse_args():
     # we don't directly specify timesteps for this script, so make sure that if we do specify them
     # they agree with the other parameters. default: 1M total steps
     
+
+    eval_steps_per_epoch = args.nb_epoch_cycles*args.nb_eval_steps #defualt: 500*20 = 10K (~ 10 episodes)
+    print(args)
     if args.num_timesteps is not None:
         assert(args.num_timesteps == args.nb_epochs * args.nb_epoch_cycles * args.nb_rollout_steps)
     dict_args = vars(args)

@@ -4,6 +4,7 @@ from collections import deque
 import pickle
 
 from baselines.ddpg.ddpg import DDPG
+from ddpg_rm import DDPG_RM
 import baselines.common.tf_util as U
 
 from baselines import logger
@@ -11,42 +12,56 @@ import numpy as np
 import tensorflow as tf
 from mpi4py import MPI
 
+from IPython import embed
 
 #perform evaluation
 #reset system and then test for total_num_of_steps
 #return the avg episode-reward. 
 def evaluation(eval_env, total_num_of_steps, agent):
-    max_action = env.action_space.high
+    max_action = eval_env.action_space.high
     episodes_cum_rew = []
     episode_rew = 0.
     eval_obs = eval_env.reset() #reset the system at the beginning
-    for t in range(total_num_of_steps):
-        eval_action = agent.pi(eval_obs, apply_noise=False, compute_Q=False) #no randomness in action
+    t = 0
+    while True:
+    #for t in range(total_num_of_steps):
+        eval_action, q = agent.pi(eval_obs, apply_noise=False, compute_Q=False) #no randomness in action
         eval_obs, eval_r, eval_done, eval_info = eval_env.step(max_action * eval_action)
+        t = t + 1
         episode_rew += eval_r
 
         if eval_done: #if the current episode terminated:
-            eval_obs = eval_env.reset() #reset for a new episode
             episodes_cum_rew.append(episode_rew)
             episode_rew = 0.
+            if t >= total_num_of_steps: #by doing this, we won't reset the env before the epsiode is done
+                break
+            eval_obs = eval_env.reset()
 
     return episodes_cum_rew #list: stores the cummulative reward for all episodes.
-    
+
 
 def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, param_noise, actor, critic,
     normalize_returns, normalize_observations, critic_l2_reg, actor_lr, critic_lr, action_noise,
     popart, gamma, clip_norm, nb_train_steps, nb_rollout_steps, nb_eval_steps, batch_size, memory,
-    tau=0.01, eval_env=None, param_noise_adaption_interval=50):
+    tau=0.01, eval_env=None, param_noise_adaption_interval=50, alg='DDPG'):
     rank = MPI.COMM_WORLD.Get_rank()
 
     assert (np.abs(env.action_space.low) == env.action_space.high).all()  # we assume symmetric actions.
     max_action = env.action_space.high
     logger.info('scaling actions by {} before executing in env'.format(max_action))
-    agent = DDPG(actor, critic, memory, env.observation_space.shape, env.action_space.shape,
-        gamma=gamma, tau=tau, normalize_returns=normalize_returns, normalize_observations=normalize_observations,
-        batch_size=batch_size, action_noise=action_noise, param_noise=param_noise, critic_l2_reg=critic_l2_reg,
-        actor_lr=actor_lr, critic_lr=critic_lr, enable_popart=popart, clip_norm=clip_norm,
-        reward_scale=reward_scale)
+    if alg == 'DDPG': 
+        agent = DDPG(actor, critic, memory, env.observation_space.shape, env.action_space.shape,
+            gamma=gamma, tau=tau, normalize_returns=normalize_returns, normalize_observations=normalize_observations,
+            batch_size=batch_size, action_noise=action_noise, param_noise=param_noise, critic_l2_reg=critic_l2_reg,
+            actor_lr=actor_lr, critic_lr=critic_lr, enable_popart=popart, clip_norm=clip_norm,
+            reward_scale=reward_scale)
+    else:
+        agent = DDPG_RM(actor, critic, memory, env.observation_space.shape, env.action_space.shape,
+            gamma=gamma, tau=tau, normalize_returns=normalize_returns, normalize_observations=normalize_observations,
+            batch_size=batch_size, action_noise=action_noise, param_noise=param_noise, critic_l2_reg=critic_l2_reg,
+            actor_lr=actor_lr, critic_lr=critic_lr, enable_popart=popart, clip_norm=clip_norm,
+            reward_scale=reward_scale)
+
     logger.info('Using agent with the following configuration:')
     logger.info(str(agent.__dict__.items()))
 
@@ -67,8 +82,8 @@ def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, pa
 
         agent.reset()
         obs = env.reset()
-        if eval_env is not None:
-            eval_obs = eval_env.reset()
+        #if eval_env is not None: eval_env is only dealt with in the evaluation function
+        #    eval_obs = eval_env.reset()
         done = False
         episode_reward = 0.
         episode_step = 0
@@ -165,7 +180,7 @@ def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, pa
             combined_stats = stats.copy()
             
             combined_stats['curr epoch id'] = epoch
-            combined_stats['train/avg episode-return (all)'] = np.mean(epoch_episode_rewards) #avg episode-rew during the entire learning process
+            combined_stats['train:avg epi-ret (all)'] = np.mean(epoch_episode_rewards) #avg episode-rew during the entire learning process
             #combined_stats['rollout/avg episode-return (all)'] = np.mean(epoch_episode_rewards) #avg episode-rew during the entire learning process
             combined_stats['train/return_history'] = np.mean(episode_rewards_history)
             combined_stats['train/episode_steps'] = np.mean(epoch_episode_steps)
@@ -188,8 +203,8 @@ def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, pa
                         agent = agent)
 
                 epoch_episode_eval_rewards += eval_episode_rewards
-                combined_stats['eval:avg episode-return (curr epoch)'] = np.mean(eval_episode_rewards)
-                combined_stats['eval/avg episode-return (all)'] = np.mean(epoch_episode_eval_rewards)
+                combined_stats['eval:avg epi-ret (curr)'] = np.mean(eval_episode_rewards)
+                combined_stats['eval:avg epi-ret (all)'] = np.mean(epoch_episode_eval_rewards)
                 #combined_stats['eval/return_history'] = np.mean(eval_episode_rewards_history)
                 #combined_stats['eval/Q'] = eval_qs
                 #combined_stats['eval/episodes (all)'] = len(epoch_episode_eval_rewards)
