@@ -17,8 +17,8 @@ from IPython import embed
 #perform evaluation
 #reset system and then test for total_num_of_steps
 #return the avg episode-reward. 
-def evaluation(eval_env, total_num_of_steps, agent):
-    max_action = eval_env.action_space.high
+def evaluation(eval_env, total_num_of_steps, agent, max_action):
+    #max_action = eval_env.action_space.high
     episodes_cum_rew = []
     episode_rew = 0.
     eval_obs = eval_env.reset() #reset the system at the beginning
@@ -200,7 +200,7 @@ def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, pa
             if eval_env is not None and epoch%5 == 0: 
                 eval_episode_rewards = evaluation(eval_env = eval_env, 
                         total_num_of_steps = nb_epoch_cycles*nb_eval_steps, 
-                        agent = agent)
+                        agent = agent, max_action = max_action)
 
                 epoch_episode_eval_rewards += eval_episode_rewards
                 combined_stats['eval:avg epi-ret (curr)'] = np.mean(eval_episode_rewards)
