@@ -101,7 +101,7 @@ def parse_args():
     parser.add_argument('--nb-epochs', type=int, default=500)  # with default settings, perform 1M steps total
     parser.add_argument('--nb-epoch-cycles', type=int, default=20)
     parser.add_argument('--nb-train-steps', type=int, default=50)  # per epoch cycle and MPI worker
-    parser.add_argument('--nb-eval-steps', type=int, default=500)  # per epoch cycle and MPI worker
+    parser.add_argument('--nb-eval-steps', type=int, default=1000)  # per epoch cycle and MPI worker
     parser.add_argument('--nb-rollout-steps', type=int, default=100)  # per epoch cycle and MPI worker
     parser.add_argument('--noise-type', type=str, default='adaptive-param_0.2')  # choices are adaptive-param_xx, ou_xx, normal_xx, none
     parser.add_argument('--num-timesteps', type=int, default=None)
@@ -114,7 +114,7 @@ def parse_args():
     # they agree with the other parameters. default: 1M total steps
     
 
-    eval_steps_per_epoch = args.nb_epoch_cycles*args.nb_eval_steps #defualt: 500*20 = 10K (~ 10 episodes)
+    eval_steps_per_epoch = args.nb_epoch_cycles*args.nb_eval_steps #defualt: 1000*20 = 10K (~ 20 episodes)
     print(args)
     if args.num_timesteps is not None:
         assert(args.num_timesteps == args.nb_epochs * args.nb_epoch_cycles * args.nb_rollout_steps)

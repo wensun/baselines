@@ -25,7 +25,7 @@ def evaluation(eval_env, total_num_of_steps, agent, max_action):
     t = 0
     while True:
     #for t in range(total_num_of_steps):
-        eval_action, q = agent.pi(eval_obs, apply_noise=False, compute_Q=False) #no randomness in action
+        eval_action, q = agent.pi(eval_obs, apply_noise=False, compute_Q=True) #no randomness in action
         eval_obs, eval_r, eval_done, eval_info = eval_env.step(max_action * eval_action)
         t = t + 1
         episode_rew += eval_r
@@ -104,6 +104,8 @@ def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, pa
         epoch_qs = [] 
         epoch_episodes = 0
         for epoch in range(nb_epochs):
+            curr_epoch_episode_rewards= []
+
             for cycle in range(nb_epoch_cycles):
                 # Perform rollouts.
                 for t_rollout in range(nb_rollout_steps):
@@ -131,6 +133,7 @@ def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, pa
                     if done:
                         # Episode done.
                         epoch_episode_rewards.append(episode_reward)
+                        curr_epoch_episode_rewards.append(episode_reward)
                         episode_rewards_history.append(episode_reward)
                         epoch_episode_steps.append(episode_step)
                         episode_reward = 0.
@@ -185,6 +188,7 @@ def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, pa
             
             combined_stats['curr epoch id'] = epoch
             combined_stats['train:avg epi-ret (all)'] = np.mean(epoch_episode_rewards) #avg episode-rew during the entire learning process
+            combined_stats['train:avg epi-ret (curr)'] = np.mean(curr_epoch_episode_rewards)
             #combined_stats['rollout/avg episode-return (all)'] = np.mean(epoch_episode_rewards) #avg episode-rew during the entire learning process
             combined_stats['train/return_history'] = np.mean(episode_rewards_history)
             combined_stats['train/episode_steps'] = np.mean(epoch_episode_steps)
@@ -194,6 +198,7 @@ def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, pa
             #combined_stats['train/loss_critic'] = np.mean(epoch_critic_losses)
             combined_stats['train/param_noise_distance'] = np.mean(epoch_adaptive_distances)
             combined_stats['total/duration'] = duration
+            combined_stats['total/steps (all)'] = t
             #combined_stats['total/steps_per_second'] = float(t) / float(duration)
             #combined_stats['total/episodes'] = episodes
             combined_stats['rollout/episodes'] = epoch_episodes
@@ -201,7 +206,7 @@ def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, pa
             
             # Evaluation statistics. 
             # every 5 epochs, we do a test by genearting a few epsidoes (usually 10 episodes for most of mujoco envs)
-            if eval_env is not None and epoch%5 == 0: 
+            if eval_env is not None and epoch%3 == 0: 
                 eval_episode_rewards = evaluation(eval_env = eval_env, 
                         total_num_of_steps = nb_epoch_cycles*nb_eval_steps, 
                         agent = agent, max_action = max_action)

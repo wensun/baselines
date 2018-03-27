@@ -30,7 +30,10 @@ class DDPG_RM(DDPG):
         gamma=0.99, tau=0.001, normalize_returns=False, enable_popart=False, normalize_observations=True,
         batch_size=128, observation_range=(-5., 5.), action_range=(-1., 1.), return_range=(-np.inf, np.inf),
         adaptive_param_noise=True, adaptive_param_noise_policy_threshold=.1,
-        critic_l2_reg=0., actor_lr=1e-4, critic_lr=1e-3, clip_norm=None, reward_scale=1.):
+        critic_l2_reg=0., actor_lr=1e-4, critic_lr=1e-3, clip_norm=None, reward_scale=1., 
+        natural_update_target = False):
+ 
+        self.nat_update_target = natural_update_target
 
         super(DDPG_RM, self).__init__(actor, critic, memory, observation_shape, action_shape, param_noise, action_noise,
                 gamma, tau, normalize_returns, enable_popart, normalize_observations,
@@ -40,6 +43,8 @@ class DDPG_RM(DDPG):
 
         # compute Jacobian 
         # setup J'Ju
+        print('########### tau {0}, actor_lr {1}, critic_lr {2}'.format(tau, actor_lr, critic_lr))
+
         self.flat_actor_trainable_vars = flatvar(self.actor.trainable_vars)
         flat_actor_shape = self.flat_actor_trainable_vars.get_shape().as_list()[1]
         self.u_right = tf.placeholder(shape=[flat_actor_shape], dtype=tf.float32, name="u_right")
@@ -55,16 +60,17 @@ class DDPG_RM(DDPG):
                                               self.flat_actor_trainable_vars.eval(session=self.sess), u, self.sess)
 
         #do the same thing for target_actor:
-        self.flat_target_actor_trainable_vars = flatvar(self.target_actor.trainable_vars)
-        self.mean_target_actor_tf_p_target_actor_tf = tf.reduce_mean(tf.reduce_sum(tf.square(self.target_actor_tf),axis=1)) #define g(\theta') = \sum_{i=1}^N pi(x_i;\theta')^T \pi(x_i;\theta')/N
-        self.targetHv = hessian_vector_product(self.mean_target_actor_tf_p_target_actor_tf, [self.flat_target_actor_trainable_vars], u = self.u_right) #\nabla^2 g(\theta') u
-        self.target_actor_f_Ax = lambda u: Hv_product(self.targetHv, self.flat_target_actor_trainable_vars, 
+        if self.nat_update_target is True:
+            self.flat_target_actor_trainable_vars = flatvar(self.target_actor.trainable_vars)
+            self.mean_target_actor_tf_p_target_actor_tf = tf.reduce_mean(tf.reduce_sum(tf.square(self.target_actor_tf),axis=1)) #define g(\theta') = \sum_{i=1}^N pi(x_i;\theta')^T \pi(x_i;\theta')/N
+            self.targetHv = hessian_vector_product(self.mean_target_actor_tf_p_target_actor_tf, [self.flat_target_actor_trainable_vars], u = self.u_right) #\nabla^2 g(\theta') u
+            self.target_actor_f_Ax = lambda u: Hv_product(self.targetHv, self.flat_target_actor_trainable_vars, 
                     self.u_right, self.flat_target_actor_trainable_vars.eval(session=self.sess), u, self.sess) 
 
-        actor_minus_target_actor = self.actor_tf - tf.scalar_mul(0.5,self.target_actor_tf) #diff = pi(x_i;\theta) - 0.5pi(x_i;\theta')
-        target_actor_p_diff = tf.reduce_mean(tf.reduce_sum(tf.multiply(self.target_actor_tf, actor_minus_target_actor),axis=1)) # G(theta') = (1/N)\sum_{i=1}^N pi(x_i;\theta')^T (pi(x_i;\theta) - 0.5\pi(x_i;\theta'))
-        self.target_actor_J_diff = flatgrad(target_actor_p_diff, [self.flat_target_actor_trainable_vars])   #nabla G(\theta') = (1/N)sum_{i=1}^N J_{theta'}(x_i)'(\pi(x_i;\theta) - \pi(x_i;\theta')), [d]
-        self.target_actor_optimizer = PlainDescent(var_list = self.target_actor.trainable_vars)
+            actor_minus_target_actor = self.actor_tf - tf.scalar_mul(0.5,self.target_actor_tf) #diff = pi(x_i;\theta) - 0.5pi(x_i;\theta')
+            target_actor_p_diff = tf.reduce_mean(tf.reduce_sum(tf.multiply(self.target_actor_tf, actor_minus_target_actor),axis=1)) # G(theta') = (1/N)\sum_{i=1}^N pi(x_i;\theta')^T (pi(x_i;\theta) - 0.5\pi(x_i;\theta'))
+            self.target_actor_J_diff = flatgrad(target_actor_p_diff, [self.flat_target_actor_trainable_vars])   #nabla G(\theta') = (1/N)sum_{i=1}^N J_{theta'}(x_i)'(\pi(x_i;\theta) - \pi(x_i;\theta')), [d]
+            self.target_actor_optimizer = PlainDescent(var_list = self.target_actor.trainable_vars)
 
         #print("actor.trainable_vars = ", self.actor.trainable_vars)
         #print("u_right = ", self.u_right)
@@ -89,8 +95,10 @@ class DDPG_RM(DDPG):
         actor_init_updates, actor_soft_updates = get_target_updates(self.actor.vars, self.target_actor.vars, self.tau)
         critic_init_updates, critic_soft_updates = get_target_updates(self.critic.vars, self.target_critic.vars, self.tau)
         self.target_init_updates = [actor_init_updates, critic_init_updates]
-        #self.target_soft_updates = [critic_soft_updates]
-        self.target_soft_updates = [actor_soft_updates, critic_soft_updates]
+        if self.nat_update_target is True:
+            self.target_soft_updates = [critic_soft_updates]
+        else:
+            self.target_soft_updates = [actor_soft_updates, critic_soft_updates]
 
 
     def train(self):
@@ -132,9 +140,10 @@ class DDPG_RM(DDPG):
         self.critic_optimizer.update(critic_grads, stepsize=self.critic_lr)
 
         #update target_actor:
-        #target_actor_J_diff = self.sess.run(self.target_actor_J_diff, feed_dict={self.obs0:batch['obs0']})
-        #target_actor_J_diff_natural = cg(self.target_actor_f_Ax, target_actor_J_diff, cg_iters = 10) # ~= (J'J)^{-1} J' (\pi - pi_target)
-        #target_mu = np.sqrt(self.tau / (target_actor_J_diff.dot(target_actor_J_diff_natural)+np.finfo(np.float32).eps))
-        #self.target_actor_optimizer.update(-target_actor_J_diff_natural, stepsize = target_mu)  #target_theta = target_theta + mu * (J'J)^{-1}J' (pi - pi_targe) , so it's like doing ascent
+        if self.nat_update_target is True:
+            target_actor_J_diff = self.sess.run(self.target_actor_J_diff, feed_dict={self.obs0:batch['obs0']})
+            target_actor_J_diff_natural = cg(self.target_actor_f_Ax, target_actor_J_diff, cg_iters = 10) # ~= (J'J)^{-1} J' (\pi - pi_target)
+            target_mu = np.sqrt(self.tau / (target_actor_J_diff.dot(target_actor_J_diff_natural)+np.finfo(np.float32).eps))
+            self.target_actor_optimizer.update(-target_actor_J_diff_natural, stepsize = target_mu)  #target_theta = target_theta + mu * (J'J)^{-1}J' (pi - pi_targe) , so it's like doing ascent
 
         return critic_loss, actor_loss
