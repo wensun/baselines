@@ -12,7 +12,7 @@ import numpy as np
 import tensorflow as tf
 from mpi4py import MPI
 
-from IPython import embed
+#from IPython import embed
 
 #perform evaluation
 #reset system and then test for total_num_of_steps
