@@ -182,7 +182,7 @@ class DDPG_RM(DDPG):
             self.actions: batch['actions'],
             self.critic_target: target_Q,
         })
-        random_rows = np.random.choice(batch['obs0'].shape[0], int(batch['obs0'].shape[0]*0.2), replace = False) #random choose half data from the mini-batch for jacobians
+        random_rows = np.random.choice(batch['obs0'].shape[0], int(batch['obs0'].shape[0]*0.1), replace = False) #random choose half data from the mini-batch for jacobians
         #actor update:
         real_actions_from_curr_actor = self.sess.run(self.actor_tf, feed_dict={self.obs0:batch['obs0'][random_rows]})
         def actor_f_Ax(u):
