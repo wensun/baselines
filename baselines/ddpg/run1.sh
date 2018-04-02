@@ -54,6 +54,6 @@ for i in "${!generated_random_array[@]}"; do
     echo "env = $env, generated random number = $generated_random_number, algorithm = $alg, rpt = $rpt"
 
     # call python script 
-    #python main.py --env-id=$env --seed=$generated_random_number --alg=$alg > $rpt
+    python main.py --env-id=$env --seed=$generated_random_number --alg=$alg > $rpt
 done 
 done 
