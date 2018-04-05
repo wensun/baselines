@@ -106,7 +106,7 @@ class LQG_env(object):
         #max_iter = 200
         for i in range(2*max_iter):
             new_P_K = self.Q + self.K.T.dot(self.R).dot(self.K) + self.gamma*(self.A+self.B.dot(self.K)).T.dot(current_P_K).dot(self.A+self.B.dot(self.K))
-            if np.linalg.norm(new_P_K - current_P_K) < 1e-7:
+            if np.linalg.norm(new_P_K - current_P_K) < 1e-5:
                 break;
             current_P_K = np.copy(new_P_K)
         self.P_K = np.copy(current_P_K)
@@ -245,7 +245,7 @@ if __name__ == '__main__':
     np.random.seed(args.seed)
     method_name = args.alg.replace("_", " ") #it also supports Natural GD and Newton Natural GD
     model = LQG_env(method_name = method_name)  
-    epoches_costs = model.train(epoch = 50, batch_size = 64, lr_or_KL=1e-2)
+    epoches_costs = model.train(epoch = 50, batch_size = 64, lr_or_KL=1e-3)
 
 
     
