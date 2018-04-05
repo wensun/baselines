@@ -1,6 +1,7 @@
 import numpy as np
 import scipy as sp
 from IPython import embed
+import argparse
 
 class ADAM(object):
     def __init__(self, dx, lr = None):
@@ -237,8 +238,12 @@ class LQG_env(object):
     
         
 if __name__ == '__main__':
-    np.random.seed(1337)
-    method_name = 'Natural GD' #it also supports Natural GD and Newton Natural GD
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('--seed', help='RNG seed', type=int, default=0)
+    parser.add_argument('--alg', type=str, default='Natural_GD') 
+    args = parser.parse_args()
+    np.random.seed(args.seed)
+    method_name = args.alg.replace("_", " ") #it also supports Natural GD and Newton Natural GD
     model = LQG_env(method_name = method_name)  
     epoches_costs = model.train(epoch = 50, batch_size = 64, lr_or_KL=1e-2)
 
