@@ -239,7 +239,7 @@ class LQG_env(object):
         
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--seed', help='RNG seed', type=int, default=0)
+    parser.add_argument('--seed', help='RNG seed', type=int, default=1337)
     parser.add_argument('--alg', type=str, default='Natural_GD') 
     args = parser.parse_args()
     np.random.seed(args.seed)
