@@ -105,7 +105,7 @@ class LQG_env(object):
         #max_iter = 200
         for i in range(2*max_iter):
             new_P_K = self.Q + self.K.T.dot(self.R).dot(self.K) + self.gamma*(self.A+self.B.dot(self.K)).T.dot(current_P_K).dot(self.A+self.B.dot(self.K))
-            if np.linalg.norm(new_P_K - current_P_K) < 1e-5:
+            if np.linalg.norm(new_P_K - current_P_K) < 1e-7:
                 break;
             current_P_K = np.copy(new_P_K)
         self.P_K = np.copy(current_P_K)
@@ -146,6 +146,7 @@ class LQG_env(object):
         JpJ /= batch_size
         
         natural_grad = np.linalg.lstsq(a = JpJ + 1e-3*np.eye(JpJ.shape[0]), b = off_policy_grad, rcond = -1)[0]
+        #print np.linalg.norm(off_policy_grad), np.linalg.norm(natural_grad)
         #compute learning_rate too:
         natural_grad_lr = np.sqrt(kl_threshold/(off_policy_grad.dot(natural_grad)+1e-7))
         return natural_grad,natural_grad_lr
@@ -171,6 +172,10 @@ class LQG_env(object):
          self.Fixed_point_iteration_Raccati_equation(max_iter = 1./(1-self.gamma))
          #compute plain "DPG":
          vectorized_grad = self.empircal_off_policy_gradient(xs = xs)
+         #vectorized_grad = vectorized_grad/np.linalg.norm(vectorized_grad)
+         #print np.linalg.norm(vectorized_grad)
+         #[U,S] = np.linalg.eig(self.P_K)
+    
          vectorized_new_K = self.ADAM_optimizer.update(theta = self.K.reshape(self.du*self.dx), grad = vectorized_grad, alpha = lr)
          #vectorized_new_K = self.Plain_GD.update(theta = self.K.reshape(self.du*self.dx), grad = vectorized_grad, alpha = lr)
          self.K = np.reshape(vectorized_new_K, (self.du, self.dx))
@@ -180,6 +185,7 @@ class LQG_env(object):
         #approximately compute P_K based on the current K:
         self.Fixed_point_iteration_Raccati_equation(max_iter = 1./(1-self.gamma))
         vectorized_nat_grad, nat_grad_lr = self.empircal_off_policy_natural_gradient(xs = xs, kl_threshold = kl_threshold)
+        #print np.linalg.norm(vectorized_nat_grad), nat_grad_lr
         vectorized_new_K = self.K.reshape(self.du*self.dx) - nat_grad_lr*vectorized_nat_grad
         self.K = np.reshape(vectorized_new_K, (self.du, self.dx))
     
@@ -232,9 +238,9 @@ class LQG_env(object):
         
 if __name__ == '__main__':
     np.random.seed(1337)
-    method_name = 'Newton Natural GD' #it also supports Natural GD and Newton Natural GD
+    method_name = 'Natural GD' #it also supports Natural GD and Newton Natural GD
     model = LQG_env(method_name = method_name)  
-    epoches_costs = model.train(epoch = 100, batch_size = 64, lr_or_KL=0.01)
+    epoches_costs = model.train(epoch = 50, batch_size = 64, lr_or_KL=1e-2)
 
 
     
