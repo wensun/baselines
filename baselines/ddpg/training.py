@@ -206,7 +206,7 @@ def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, pa
             
             # Evaluation statistics. 
             # every 5 epochs, we do a test by genearting a few epsidoes (usually 10 episodes for most of mujoco envs)
-            if eval_env is not None and epoch%3 == 0: 
+            if eval_env is not None and epoch%2 == 0: 
                 eval_episode_rewards = evaluation(eval_env = eval_env, 
                         total_num_of_steps = nb_epoch_cycles*nb_eval_steps, 
                         agent = agent, max_action = max_action)
