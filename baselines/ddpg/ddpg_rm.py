@@ -187,31 +187,26 @@ class DDPG_RM(DDPG):
             self.actions: batch['actions'],
             self.critic_target: target_Q,
         })
-        random_rows = np.random.choice(batch['obs0'].shape[0], 10, replace = False) #random choose half data from the mini-batch for jacobians
+        random_rows = np.random.choice(batch['obs0'].shape[0], int(batch['obs0'].shape[0]*0.2), replace = False) #random choose half data from the mini-batch for jacobians
         #actor update:
         real_actions_from_curr_actor = self.sess.run(self.actor_tf, feed_dict={self.obs0:batch['obs0'][random_rows]})
         def actor_f_Ax(u):
             real_Hu = self.sess.run(self.Hu, feed_dict={self.obs0:batch['obs0'][random_rows], self.u_right:u})
             real_Hhatu = self.sess.run(self.Hhat_u, feed_dict={self.obs0:batch['obs0'][random_rows], self.actions:real_actions_from_curr_actor, self.u_right:u})
-            return real_Hu - real_Hhatu
+            #print (u.dot(0.5*real_Hu-real_Hhatu))
+            return 0.5*real_Hu - real_Hhatu
 
         # ==== compute natural gradient 
-        #damping = self.default_damping #self.default_dampling
-        #print(self.current_damping)
         actor_grads_natural = cg(actor_f_Ax, actor_grads, damping = self.current_damping, cg_iters=10)
-        mu = actor_grads.dot(actor_grads_natural)
-        if mu > 0:
-            self.actor_optimizer.update(actor_grads_natural, stepsize=mu)
-            self.current_damping = np.max([self.min_damping, self.current_damping/2.]) #we can decrease damping
+        delta = actor_grads.dot(actor_grads_natural)
+        if delta < 0:
+            print ('non psd')
+        #mu = np.min([np.sqrt(self.actor_lr/(delta + 1e-7)), 1e0])
+        if delta > 0:
+            mu = np.sqrt(self.actor_lr/(delta+1e-7))
         else:
-            while mu < 0: #if mu is less zero
-                self.current_damping = np.min([self.current_damping*2., self.max_damping]) #we increase damping
-                actor_grads_natural = cg(actor_f_Ax, actor_grads, damping = self.current_damping, cg_iters = 10)
-                mu = actor_grads.dot(actor_grads_natural)
-                if np.abs(self.current_damping - self.max_damping) < 1e-1:
-                    break;
-            if mu > 0:
-                self.actor_optimizer.update(actor_grads_natural, stepsize=mu)
+            mu = 0.
+        self.actor_optimizer.update(actor_grads_natural, stepsize=mu)
 
         #critic update:
         if self.nat_update_critic is False:
@@ -222,7 +217,7 @@ class DDPG_RM(DDPG):
             def critic_f_Ax(u):
                 real_Hu = self.sess.run(self.Hu_c, feed_dict={self.obs0:batch['obs0'][random_rows], self.actions:batch['actions'][random_rows], self.u_right_c:u})
                 real_Hhatu = self.sess.run(self.Hhatu_c, feed_dict = {self.obs0:batch['obs0'][random_rows], self.actions:batch['actions'][random_rows], self.critic_values:real_norm_critic_values, self.u_right_c:u})
-                return real_Hu - real_Hhatu
+                return 0.5*real_Hu - real_Hhatu
             # ==== compute natural gradient
             critic_grads_natural = cg(critic_f_Ax, critic_grads, cg_iters = 10)
             critic_mu = np.min([np.sqrt(self.critic_lr / (critic_grads.dot(critic_grads_natural) + np.finfo(np.float32).eps)),1.])
