@@ -33,11 +33,16 @@ class DDPG_RM(DDPG):
         gamma=0.99, tau=0.001, normalize_returns=False, enable_popart=False, normalize_observations=True,
         batch_size=128, observation_range=(-5., 5.), action_range=(-1., 1.), return_range=(-np.inf, np.inf),
         adaptive_param_noise=True, adaptive_param_noise_policy_threshold=.1,
-        critic_l2_reg=0., actor_lr=1e-4, critic_lr=1e-3, clip_norm=None, reward_scale=1., 
+        critic_l2_reg=0., actor_lr=1e-4, critic_lr=1e-3, clip_norm=None, reward_scale=1., default_cg_damping = 1e-3,
         natural_update_target = False, natural_critic_update = False):
  
         self.nat_update_target = natural_update_target
         self.nat_update_critic = natural_critic_update
+        self.current_damping = default_cg_damping
+
+        self.min_damping = 1e-3
+        self.max_damping = 1e3
+
         super(DDPG_RM, self).__init__(actor, critic, memory, observation_shape, action_shape, param_noise, action_noise,
                 gamma, tau, normalize_returns, enable_popart, normalize_observations,
                 batch_size, observation_range, action_range, return_range,
@@ -182,26 +187,31 @@ class DDPG_RM(DDPG):
             self.actions: batch['actions'],
             self.critic_target: target_Q,
         })
-        random_rows = np.random.choice(batch['obs0'].shape[0], int(batch['obs0'].shape[0]*0.1), replace = False) #random choose half data from the mini-batch for jacobians
+        random_rows = np.random.choice(batch['obs0'].shape[0], 10, replace = False) #random choose half data from the mini-batch for jacobians
         #actor update:
         real_actions_from_curr_actor = self.sess.run(self.actor_tf, feed_dict={self.obs0:batch['obs0'][random_rows]})
         def actor_f_Ax(u):
             real_Hu = self.sess.run(self.Hu, feed_dict={self.obs0:batch['obs0'][random_rows], self.u_right:u})
-            #real_Hhatu = self.sess.run(self.Hhat_u, feed_dict={self.obs0:batch['obs0'][random_rows], self.actions:real_actions_from_curr_actor, self.u_right:u})
-            return real_Hu #- real_Hhatu
+            real_Hhatu = self.sess.run(self.Hhat_u, feed_dict={self.obs0:batch['obs0'][random_rows], self.actions:real_actions_from_curr_actor, self.u_right:u})
+            return real_Hu - real_Hhatu
 
         # ==== compute natural gradient 
-        actor_grads_natural = cg(actor_f_Ax, actor_grads, cg_iters=10)
-        # use actor_lr for delta  
-        #print (self.actor_lr / (actor_grads_natural.dot(actor_f_Ax(actor_grads_natural))))
-        if actor_grads.dot(actor_grads_natural) < 0:
-            pass
-            #print ("non psd")
-            #self.actor_optimizer.update(actor_grads, stepsize = self.actor_lr*1e-1)
-        else:
-            #print ('psd')
-            mu = np.min([np.sqrt(self.actor_lr / (actor_grads.dot(actor_grads_natural) + np.finfo(np.float32).eps)),1.]) # avoid zero division 
+        #damping = self.default_damping #self.default_dampling
+        #print(self.current_damping)
+        actor_grads_natural = cg(actor_f_Ax, actor_grads, damping = self.current_damping, cg_iters=10)
+        mu = actor_grads.dot(actor_grads_natural)
+        if mu > 0:
             self.actor_optimizer.update(actor_grads_natural, stepsize=mu)
+            self.current_damping = np.max([self.min_damping, self.current_damping/2.]) #we can decrease damping
+        else:
+            while mu < 0: #if mu is less zero
+                self.current_damping = np.min([self.current_damping*2., self.max_damping]) #we increase damping
+                actor_grads_natural = cg(actor_f_Ax, actor_grads, damping = self.current_damping, cg_iters = 10)
+                mu = actor_grads.dot(actor_grads_natural)
+                if np.abs(self.current_damping - self.max_damping) < 1e-1:
+                    break;
+            if mu > 0:
+                self.actor_optimizer.update(actor_grads_natural, stepsize=mu)
 
         #critic update:
         if self.nat_update_critic is False:
