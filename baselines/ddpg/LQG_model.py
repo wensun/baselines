@@ -173,7 +173,7 @@ class LQG_env(object):
          self.Fixed_point_iteration_Raccati_equation(max_iter = 1./(1-self.gamma))
          #compute plain "DPG":
          vectorized_grad = self.empircal_off_policy_gradient(xs = xs)
-         #vectorized_grad = vectorized_grad/np.linalg.norm(vectorized_grad)
+         vectorized_grad = vectorized_grad/np.linalg.norm(vectorized_grad)
          #print np.linalg.norm(vectorized_grad)
          #[U,S] = np.linalg.eig(self.P_K)
     
