@@ -49,8 +49,12 @@ class LQGEnv(gym.Env):
         print("Q = ", self.Q)
         print("noise_cov = ", self.noise_cov)
 
+        self.T = 200
+        self.t = 0
+
     def reset(self):
         self.state = np.random.multivariate_normal(mean = self.init_state_mean, cov = self.init_state_cov)
+        self.t = 0
         return self.state
 
     def step(self, a): 
@@ -59,7 +63,11 @@ class LQGEnv(gym.Env):
         next_state = next_state.reshape(self.x_dim)
         self.state = next_state + np.random.multivariate_normal(mean = np.zeros(self.x_dim), cov = self.noise_cov)
 
-        return self.state, -cost, False, None
+        done = False
+        self.t += 1
+        if self.t >= self.T
+            done = True
+        return self.state, -cost, done, None
 
     def seed(self, seed):
         np.random.seed(seed)
