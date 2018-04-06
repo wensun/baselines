@@ -71,6 +71,11 @@ class LQG_env(object):
         self.ADAM_optimizer = ADAM(dx = self.dx*self.du, lr = None)
         #self.Plain_GD = PlainGD(dx = self.dx*self.du)
 
+        print("A = ", self.A)
+        print("B = ", self.B)
+        print("Q = ", self.Q)
+        print("noise_cov = ", self.noise_cov)
+
 
     def reset(self):
         self.state = np.random.multivariate_normal(mean = self.init_state_mean, cov = self.init_state_cov)

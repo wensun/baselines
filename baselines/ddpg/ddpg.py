@@ -310,6 +310,12 @@ class DDPG(object):
                 self.rewards: batch['rewards'],
                 self.terminals1: batch['terminals1'].astype('float32'),
             })
+        ###### debug
+        #if np.isnan(target_Q).any():
+        #    print("rewards = ", batch['rewards'])
+        #    print("terminals1 = ", batch['terminals1'])
+        #    print("obs1 = ", batch['obs1'])
+        assert not np.isnan(target_Q).any()
 
         # Get all gradients and perform a synced update.
         ops = [self.actor_grads, self.actor_loss, self.critic_grads, self.critic_loss]
@@ -318,7 +324,15 @@ class DDPG(object):
             self.actions: batch['actions'],
             self.critic_target: target_Q,
         })
+        ###### debug
+        #print("update actor")
+        #print(actor_grads)
+        assert not np.isnan(actor_grads).any()
         self.actor_optimizer.update(actor_grads, stepsize=self.actor_lr)
+        ###### debug
+        #print("update critic")
+        #print(critic_grads)
+        assert not np.isnan(critic_grads).any()
         self.critic_optimizer.update(critic_grads, stepsize=self.critic_lr)
 
         return critic_loss, actor_loss

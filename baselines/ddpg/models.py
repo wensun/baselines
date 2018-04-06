@@ -57,7 +57,7 @@ class Actor(Model):
 
 class Linear_Actor(Model):
     def __init__(self, nb_actions, name='actor', layer_norm=True):
-        super(Actor, self).__init__(name=name)
+        super(Linear_Actor, self).__init__(name=name)
         self.nb_actions = nb_actions
         self.layer_norm = layer_norm
     
@@ -104,7 +104,7 @@ class Critic(Model):
 
 class Quadratic_Critic(Model):
     def __init__(self, name='critic', layer_norm=True):
-        super(Critic, self).__init__(name=name)
+        super(Quadratic_Critic, self).__init__(name=name)
         self.layer_norm = layer_norm
     
     def __call__(self, obs, action, reuse=False):
