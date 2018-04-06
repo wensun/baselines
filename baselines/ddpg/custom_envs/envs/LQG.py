@@ -52,7 +52,7 @@ class LinearQuadGausEnv(gym.Env):
         next_state = self.A.dot(self.state) + self.B*a;
         self.state = next_state + np.random.multivariate_normal(mean = np.zeros(self.x_dim), cov = self.noise_cov)
 
-        return self.state, -cost, False;
+        return self.state, -cost, False, None;
 
     def seed(self, seed):
         pass 
