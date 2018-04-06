@@ -112,7 +112,7 @@ class Quadratic_Critic(Model):
             if reuse:
                 scope.reuse_variables()
         
-            x = obs
+            x = tf.concat([obs, action], axis=-1)
             #create quadratic feature:
             x = tf_quadratic_mapping(x)
             x = tf.layers.dense(x, 1, kernel_initializer=tf.random_uniform_initializer(minval=-3e-3, maxval=3e-3))
