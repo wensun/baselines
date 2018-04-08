@@ -65,9 +65,9 @@ class LQGEnv(gym.Env):
 
         done = False
         self.t += 1
-        if self.t >= self.T
+        if self.t >= self.T:
             done = True
-        return self.state, -cost, done, None
+        return self.state, -cost, done, {}
 
     def seed(self, seed):
         np.random.seed(seed)

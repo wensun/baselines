@@ -104,8 +104,8 @@ def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, pa
                     assert max_action.shape == action.shape
                     new_obs, r, done, info = env.step(max_action * action)  # scale for execution in env (as far as DDPG is concerned, every action is in [-1, 1])
                     ###### debug 
-                    print("new_obs = ", new_obs)
-                    print("reward = ", r)
+                    #print("new_obs = ", new_obs)
+                    #print("reward = ", r)
                     t += 1
                     if rank == 0 and render:
                         env.render()

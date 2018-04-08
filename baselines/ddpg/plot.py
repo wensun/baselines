@@ -40,10 +40,15 @@ def read(filename, cumulative_flag):
             count += 1
     return np.array(data)
 
-seed_array = [29784, 15851, 12955, 1498, 21988, 7706, 31727, 2774, 8287, 20590]
+#seed_array = [29784, 15851, 12955, 1498, 21988, 7706, 31727, 2774, 8287, 20590]
+seed_array = [29784]
 alg_array = ["DDPG", "DDPGRM"]
 #env = "InvertedPendulum-v2"
-env = "InvertedDoublePendulum-v2"
+#env = "InvertedDoublePendulum-v2"
+#env = "HalfCheetah-v2"
+#env = "Ant-v2"
+#env = "Walker2d-v2"
+env = "LQG-v2"
 cumulative_flag = True
 
 data_map = {}
@@ -93,6 +98,9 @@ for alg in alg_array:
 
     p = plt.plot(avg_data[:, 0], avg_data[:, 2], label=alg)
     plt.fill_between(avg_data[:, 0], avg_data[:, 2]-std_data[:, 2], avg_data[:, 2]+std_data[:, 2], color=p[-1].get_color(), alpha=0.4)
+
+if env.startswith("LQG"):
+    plt.yscale('symlog')
 
 plt.legend()
 plt.xlabel("Epoch")
