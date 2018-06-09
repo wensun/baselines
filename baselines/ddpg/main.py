@@ -176,7 +176,7 @@ def parse_args():
     parser.add_argument('--num-timesteps', type=int, default=None)
     parser.add_argument('--alg', type=str, default='DDPG') # DDPG or DDPGRM
     #boolean_flag(parser, 'evaluation', default=False)
-    
+
     boolean_flag(parser, 'evaluation', default=True) #turn evaluation on 
     args = parser.parse_args()
     # we don't directly specify timesteps for this script, so make sure that if we do specify them

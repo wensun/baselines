@@ -182,13 +182,13 @@ class DDPG_RM(DDPG):
             self.actions: batch['actions'],
             self.critic_target: target_Q,
         })
-        random_rows = np.random.choice(batch['obs0'].shape[0], int(batch['obs0'].shape[0]*0.1), replace = False) #random choose half data from the mini-batch for jacobians
+        random_rows = np.random.choice(batch['obs0'].shape[0], int(batch['obs0'].shape[0]*1), replace = False) #random choose half data from the mini-batch for jacobians
         #actor update:
         real_actions_from_curr_actor = self.sess.run(self.actor_tf, feed_dict={self.obs0:batch['obs0'][random_rows]})
         def actor_f_Ax(u):
             real_Hu = self.sess.run(self.Hu, feed_dict={self.obs0:batch['obs0'][random_rows], self.u_right:u})
-            #real_Hhatu = self.sess.run(self.Hhat_u, feed_dict={self.obs0:batch['obs0'][random_rows], self.actions:real_actions_from_curr_actor, self.u_right:u})
-            return real_Hu #- real_Hhatu
+            real_Hhatu = self.sess.run(self.Hhat_u, feed_dict={self.obs0:batch['obs0'][random_rows], self.actions:real_actions_from_curr_actor, self.u_right:u})
+            return 0.5*real_Hu - real_Hhatu
 
         # ==== compute natural gradient 
         actor_grads_natural = cg(actor_f_Ax, actor_grads, cg_iters=10)
@@ -196,11 +196,11 @@ class DDPG_RM(DDPG):
         #print (self.actor_lr / (actor_grads_natural.dot(actor_f_Ax(actor_grads_natural))))
         if actor_grads.dot(actor_grads_natural) < 0:
             pass
-            #print ("non psd")
+            print ("non psd")
             #self.actor_optimizer.update(actor_grads, stepsize = self.actor_lr*1e-1)
         else:
             #print ('psd')
-            mu = np.min([np.sqrt(self.actor_lr / (actor_grads.dot(actor_grads_natural) + np.finfo(np.float32).eps)),1.]) # avoid zero division 
+            mu = np.sqrt(self.actor_lr / (actor_grads.dot(actor_grads_natural) + np.finfo(np.float32).eps)) # avoid zero division 
             self.actor_optimizer.update(actor_grads_natural, stepsize=mu)
 
         #critic update:
