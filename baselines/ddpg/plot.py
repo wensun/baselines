@@ -4,6 +4,8 @@
 # @date   Mar 2018
 #
 
+import matplotlib 
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt 
 import numpy as np 
 import re 
@@ -44,6 +46,7 @@ seed_array = [29784, 15851, 12955, 1498, 21988, 7706, 31727, 2774, 8287, 20590]
 alg_array = ["DDPG", "DDPGRM"]
 #env = "InvertedPendulum-v2"
 env = "InvertedDoublePendulum-v2"
+env = "Ant-v2"
 cumulative_flag = True
 
 data_map = {}

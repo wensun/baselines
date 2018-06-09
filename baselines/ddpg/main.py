@@ -128,4 +128,6 @@ if __name__ == '__main__':
     if MPI.COMM_WORLD.Get_rank() == 0:
         logger.configure()
     # Run actual script.
+    tt = time.time()
     run(**args)
+    print("total runtime %g seconds" % (time.time()-tt))
