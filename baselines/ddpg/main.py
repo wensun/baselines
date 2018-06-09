@@ -193,6 +193,7 @@ def parse_args():
 
 
 if __name__ == '__main__':
+    tt = time.time()
     args = parse_args()
     if MPI.COMM_WORLD.Get_rank() == 0:
         logger.configure()
@@ -201,3 +202,4 @@ if __name__ == '__main__':
         run_custom(**args)
     else:
         run(**args)
+    print("runtime %.2f seconds" % (time.time()-tt))
