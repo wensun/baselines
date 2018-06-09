@@ -1,7 +1,7 @@
 ##
-# @file   run.sh
+# @file   run3.sh
 # @author Yibo Lin
-# @date   Mar 2018
+# @date   Apr 2018
 #
 #!/bin/bash
 
@@ -48,7 +48,7 @@ mkdir -p log
 for env in "${env_array[@]}"; do 
 for alg in "${alg_array[@]}"; do
 for i in "${!generated_random_array[@]}"; do 
-    if [[ $i < 3 || $i > 5 ]]; then 
+    if [[ $i < 9 ]]; then 
         continue 
     fi 
     generated_random_number="${generated_random_array[$i]}"
